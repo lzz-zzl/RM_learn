@@ -1,0 +1,591 @@
+//
+// Created by llljjjqqq on 22-11-4.
+//
+
+#pragma once
+
+#include "rm_referee/ui/ui_base.h"
+
+#include <rm_msgs/LeggedChassisStatus.h>
+
+#include <algorithm>
+
+namespace rm_referee
+{
+class TimeChangeUi : public UiBase
+{
+public:
+  explicit TimeChangeUi(XmlRpc::XmlRpcValue& rpc_value, Base& base, const std::string& graph_name,
+                        std::deque<Graph>* graph_queue, std::deque<Graph>* character_queue)
+    : UiBase(rpc_value, base, graph_queue, character_queue)
+  {
+    graph_ = new Graph(rpc_value["config"], base_, id_++);
+  }
+  void update() override;
+  void updateForQueue() override;
+  virtual void updateConfig(){};
+};
+
+class TimeChangeGroupUi : public GroupUiBase
+{
+public:
+  explicit TimeChangeGroupUi(XmlRpc::XmlRpcValue& rpc_value, Base& base, const std::string& graph_name,
+                             std::deque<Graph>* graph_queue, std::deque<Graph>* character_queue)
+    : GroupUiBase(rpc_value, base, graph_queue, character_queue)
+  {
+    graph_name_ = graph_name;
+  }
+  void update() override;
+  void updateForQueue() override;
+  virtual void updateConfig(){};
+
+protected:
+  std::string graph_name_;
+};
+
+class CapacitorTimeChangeUi : public TimeChangeUi
+{
+public:
+  explicit CapacitorTimeChangeUi(XmlRpc::XmlRpcValue& rpc_value, Base& base, std::deque<Graph>* graph_queue,
+                                 std::deque<Graph>* character_queue)
+    : TimeChangeUi(rpc_value, base, "capacitor", graph_queue, character_queue){};
+  void add() override;
+  void updateRemainCharge(const double remain_charge, const ros::Time& time);
+
+private:
+  void updateConfig() override;
+  double remain_charge_;
+};
+
+class RelocalizeProgressTimeChangeUi : public TimeChangeUi
+{
+public:
+  explicit RelocalizeProgressTimeChangeUi(XmlRpc::XmlRpcValue& rpc_value, Base& base, std::deque<Graph>* graph_queue,
+                                          std::deque<Graph>* character_queue)
+    : TimeChangeUi(rpc_value, base, "relocalize", graph_queue, character_queue)
+  {
+  }
+  void add() override;
+  void updateRelocalizeProgress(const double data, const ros::Time& time);
+
+private:
+  void updateConfig() override;
+  double relocalize_progress_;
+};
+
+class EffortTimeChangeUi : public TimeChangeUi
+{
+public:
+  explicit EffortTimeChangeUi(XmlRpc::XmlRpcValue& rpc_value, Base& base, std::deque<Graph>* graph_queue,
+                              std::deque<Graph>* character_queue)
+    : TimeChangeUi(rpc_value, base, "effort", graph_queue, character_queue){};
+  void updateJointStateData(const sensor_msgs::JointState::ConstPtr data, const ros::Time& time);
+
+private:
+  void updateConfig() override;
+  double joint_effort_;
+  std::string joint_name_;
+};
+
+class ProgressTimeChangeUi : public TimeChangeUi
+{
+public:
+  explicit ProgressTimeChangeUi(XmlRpc::XmlRpcValue& rpc_value, Base& base, std::deque<Graph>* graph_queue,
+                                std::deque<Graph>* character_queue)
+    : TimeChangeUi(rpc_value, base, "progress", graph_queue, character_queue){};
+  void updateEngineerUiData(const rm_msgs::EngineerUi::ConstPtr data, const ros::Time& last_get_data_time);
+
+private:
+  void updateConfig() override;
+  uint32_t finished_data_, total_steps_;
+  std::string step_name_;
+};
+
+class DartStatusTimeChangeUi : public TimeChangeUi
+{
+public:
+  explicit DartStatusTimeChangeUi(XmlRpc::XmlRpcValue& rpc_value, Base& base, std::deque<Graph>* graph_queue,
+                                  std::deque<Graph>* character_queue)
+    : TimeChangeUi(rpc_value, base, "dart", graph_queue, character_queue){};
+  void updateDartClientCmd(const rm_msgs::DartClientCmd::ConstPtr data, const ros::Time& last_get_data_time);
+
+private:
+  void updateConfig() override;
+  uint8_t dart_launch_opening_status_;
+};
+
+class RotationTimeChangeUi : public TimeChangeUi
+{
+public:
+  explicit RotationTimeChangeUi(XmlRpc::XmlRpcValue& rpc_value, Base& base, std::deque<Graph>* graph_queue,
+                                std::deque<Graph>* character_queue)
+    : TimeChangeUi(rpc_value, base, "rotation", graph_queue, character_queue)
+  {
+    if (rpc_value.hasMember("data"))
+    {
+      XmlRpc::XmlRpcValue data = rpc_value["data"];
+      try
+      {
+        arc_scale_ = static_cast<int>(data["scale"]);
+        gimbal_reference_frame_ = static_cast<std::string>(data["gimbal_reference_frame"]);
+        chassis_reference_frame_ = static_cast<std::string>(data["chassis_reference_frame"]);
+      }
+      catch (XmlRpc::XmlRpcException& e)
+      {
+        ROS_FATAL_STREAM("Exception raised by XmlRpc while reading the "
+                         << "configuration: " << e.getMessage() << ".\n"
+                         << "Please check configuration is exit");
+      }
+    }
+    else
+      ROS_WARN("RotationTimeChangeUi config 's member 'data' not defined.");
+  };
+  void updateChassisCmdData(const rm_msgs::ChassisCmd::ConstPtr data);
+
+private:
+  void updateConfig() override;
+  int arc_scale_;
+  std::string gimbal_reference_frame_, chassis_reference_frame_;
+  uint8_t chassis_mode_;
+};
+
+class LaneLineTimeChangeGroupUi : public TimeChangeGroupUi
+{
+public:
+  explicit LaneLineTimeChangeGroupUi(XmlRpc::XmlRpcValue& rpc_value, Base& base, std::deque<Graph>* graph_queue,
+                                     std::deque<Graph>* character_queue)
+    : TimeChangeGroupUi(rpc_value, base, "lane_line", graph_queue, character_queue)
+  {
+    if (rpc_value.hasMember("data"))
+    {
+      XmlRpc::XmlRpcValue& data = rpc_value["data"];
+      robot_radius_ = data["radius"];
+      robot_height_ = data["height"];
+      camera_range_ = data["camera_range"];
+      surface_coefficient_ = data["surface_coefficient"];
+    }
+    else
+      ROS_WARN("LaneLineTimeChangeGroupUi config 's member 'data' not defined.");
+
+    if (rpc_value.hasMember("reference_frame"))
+    {
+      reference_frame_ = static_cast<std::string>(rpc_value["reference_frame"]);
+    }
+    else
+      ROS_WARN("LaneLineTimeChangeGroupUi config 's member 'reference_frame' not defined.");
+
+    graph_vector_.insert(
+        std::pair<std::string, Graph*>(graph_name_ + "_left", new Graph(rpc_value["config"], base_, id_++)));
+    graph_vector_.insert(
+        std::pair<std::string, Graph*>(graph_name_ + "_right", new Graph(rpc_value["config"], base_, id_++)));
+
+    for (auto it : graph_vector_)
+      lane_line_double_graph_.push_back(it.second);
+  }
+  void updateJointStateData(const sensor_msgs::JointState::ConstPtr data, const ros::Time& time);
+
+protected:
+  std::string reference_frame_;
+  double robot_radius_, robot_height_, camera_range_, surface_coefficient_ = 0.5;
+  double pitch_angle_ = 0., screen_x_ = 1920, screen_y_ = 1080;
+  double end_point_a_angle_, end_point_b_angle_;
+
+private:
+  void updateConfig() override;
+
+  std::vector<Graph*> lane_line_double_graph_;
+};
+
+class BalancePitchTimeChangeGroupUi : public TimeChangeGroupUi
+{
+public:
+  explicit BalancePitchTimeChangeGroupUi(XmlRpc::XmlRpcValue& rpc_value, Base& base, std::deque<Graph>* graph_queue,
+                                         std::deque<Graph>* character_queue)
+    : TimeChangeGroupUi(rpc_value, base, "balance_pitch", graph_queue, character_queue)
+  {
+    XmlRpc::XmlRpcValue config;
+
+    config["type"] = "line";
+    if (rpc_value["config"].hasMember("color"))
+      config["color"] = rpc_value["config"]["color"];
+    else
+      config["color"] = "cyan";
+    if (rpc_value["config"].hasMember("width"))
+      config["width"] = rpc_value["config"]["width"];
+    else
+      config["width"] = 2;
+    if (rpc_value["config"].hasMember("delay"))
+      config["delay"] = rpc_value["config"]["delay"];
+    else
+      config["delay"] = 0.2;
+
+    XmlRpc::XmlRpcValue data = rpc_value["data"];
+    ROS_ASSERT(data.hasMember("centre_point") && data.hasMember("bottom_angle") && data.hasMember("length"));
+    centre_point_[0] = static_cast<int>(data["centre_point"][0]);
+    centre_point_[1] = static_cast<int>(data["centre_point"][1]);
+    bottom_angle_ = data["bottom_angle"];
+    length_ = data["length"];
+    triangle_left_point_[0] = centre_point_[0] - length_ * sin(bottom_angle_ / 2);
+    triangle_left_point_[1] = centre_point_[1] + length_ * cos(bottom_angle_ / 2);
+    triangle_right_point_[0] = centre_point_[0] + length_ * sin(bottom_angle_ / 2);
+    triangle_right_point_[1] = centre_point_[1] + length_ * cos(bottom_angle_ / 2);
+
+    config["start_position"][0] = centre_point_[0] - length_;
+    config["start_position"][1] = centre_point_[1];
+    config["end_position"][0] = centre_point_[0] + length_;
+    config["end_position"][1] = centre_point_[1];
+    graph_vector_.insert(std::make_pair<std::string, Graph*>("bottom", new Graph(config, base_, id_++)));
+
+    config["start_position"][0] = centre_point_[0];
+    config["start_position"][1] = centre_point_[1];
+    config["end_position"][0] = triangle_left_point_[0];
+    config["end_position"][1] = triangle_left_point_[1];
+    graph_vector_.insert(std::make_pair<std::string, Graph*>("triangle_left_side", new Graph(config, base_, id_++)));
+
+    config["start_position"][0] = centre_point_[0];
+    config["start_position"][1] = centre_point_[1];
+    config["end_position"][0] = triangle_right_point_[0];
+    config["end_position"][1] = triangle_right_point_[1];
+    graph_vector_.insert(std::make_pair<std::string, Graph*>("triangle_right_side", new Graph(config, base_, id_++)));
+  }
+
+  void calculatePointPosition(const rm_msgs::BalanceStateConstPtr& data, const ros::Time& time);
+
+private:
+  void updateConfig() override;
+
+  int centre_point_[2], triangle_left_point_[2], triangle_right_point_[2], length_;
+  double bottom_angle_;
+};
+
+class PitchAngleTimeChangeUi : public TimeChangeUi
+{
+public:
+  explicit PitchAngleTimeChangeUi(XmlRpc::XmlRpcValue& rpc_value, Base& base, std::deque<Graph>* graph_queue,
+                                  std::deque<Graph>* character_queue)
+    : TimeChangeUi(rpc_value, base, "pitch", graph_queue, character_queue){};
+  void updateJointStateData(const sensor_msgs::JointState::ConstPtr data, const ros::Time& time);
+
+private:
+  void updateConfig() override;
+  double pitch_angle_ = 0.;
+};
+
+class ImageTransmissionAngleTimeChangeUi : public TimeChangeUi
+{
+public:
+  explicit ImageTransmissionAngleTimeChangeUi(XmlRpc::XmlRpcValue& rpc_value, Base& base,
+                                              std::deque<Graph>* graph_queue, std::deque<Graph>* character_queue)
+    : TimeChangeUi(rpc_value, base, "image_transmission", graph_queue, character_queue){};
+  void updateJointStateData(const sensor_msgs::JointState::ConstPtr data, const ros::Time& time);
+
+private:
+  void updateConfig() override;
+  double image_transmission_angle_ = 0.;
+};
+
+class JointPositionTimeChangeUi : public TimeChangeUi
+{
+public:
+  explicit JointPositionTimeChangeUi(XmlRpc::XmlRpcValue& rpc_value, Base& base, std::deque<Graph>* graph_queue,
+                                     std::deque<Graph>* character_queue, std::string name)
+    : TimeChangeUi(rpc_value, base, name, graph_queue, character_queue)
+  {
+    if (rpc_value.hasMember("data"))
+    {
+      XmlRpc::XmlRpcValue data = rpc_value["data"];
+      min_val_ = static_cast<double>(data["min_val"]);
+      max_val_ = static_cast<double>(data["max_val"]);
+      direction_ = static_cast<std::string>(data["direction"]);
+      length_ = static_cast<double>(data["line_length"]);
+    }
+    name_ = name;
+  };
+  void updateJointStateData(const sensor_msgs::JointState::ConstPtr data, const ros::Time& time);
+
+private:
+  void updateConfig() override;
+  std::string name_, direction_;
+  double max_val_, min_val_, current_val_, length_;
+};
+
+class BulletTimeChangeUi : public TimeChangeUi
+{
+public:
+  explicit BulletTimeChangeUi(XmlRpc::XmlRpcValue& rpc_value, Base& base, std::deque<Graph>* graph_queue,
+                              std::deque<Graph>* character_queue)
+    : TimeChangeUi(rpc_value, base, "remaining_bullet", graph_queue, character_queue){};
+  void updateBulletData(const rm_msgs::BulletAllowance& data, const ros::Time& time);
+  void reset();
+
+private:
+  void updateConfig() override;
+  int bullet_allowance_num_17_mm_, bullet_allowance_num_42_mm_, bullet_num_17_mm_{ 0 }, bullet_num_42_mm_{ 0 };
+};
+
+class TargetDistanceTimeChangeUi : public TimeChangeUi
+{
+public:
+  explicit TargetDistanceTimeChangeUi(XmlRpc::XmlRpcValue& rpc_value, Base& base, std::deque<Graph>* graph_queue,
+                                      std::deque<Graph>* character_queue)
+    : TimeChangeUi(rpc_value, base, "target_distance", graph_queue, character_queue){};
+  void updateTargetDistanceData(const rm_msgs::TrackData::ConstPtr& data);
+
+private:
+  void updateConfig() override;
+  double target_distance_;
+};
+
+class DeployDistanceTimeChangeUi : public TimeChangeUi
+{
+public:
+  explicit DeployDistanceTimeChangeUi(XmlRpc::XmlRpcValue& rpc_value, Base& base, std::deque<Graph>* graph_queue,
+                                      std::deque<Graph>* character_queue)
+    : TimeChangeUi(rpc_value, base, "deploy_distance", graph_queue, character_queue){};
+  void updateDeployDistanceData(const geometry_msgs::PointConstPtr& data);
+
+private:
+  void updateConfig() override;
+  double deploy_distance_{};
+};
+
+class HeroLegTimeChangeUi : public TimeChangeUi
+{
+public:
+  explicit HeroLegTimeChangeUi(XmlRpc::XmlRpcValue& rpc_value, Base& base, std::deque<Graph>* graph_queue,
+                               std::deque<Graph>* character_queue)
+    : TimeChangeUi(rpc_value, base, "hero_leg_feedforward_countdown", graph_queue, character_queue)
+  {
+  }
+  void updateFeedforwardCountdown(int feedforward_countdown);
+
+private:
+  void updateConfig() override;
+  int feedforward_countdown_{};
+};
+class DroneTowardsTimeChangeGroupUi : public TimeChangeGroupUi
+{
+public:
+  explicit DroneTowardsTimeChangeGroupUi(XmlRpc::XmlRpcValue& rpc_value, Base& base, std::deque<Graph>* graph_queue,
+                                         std::deque<Graph>* character_queue)
+    : TimeChangeGroupUi(rpc_value, base, "drone_towards", graph_queue, character_queue)
+  {
+    if (rpc_value.hasMember("data"))
+    {
+      XmlRpc::XmlRpcValue& data = rpc_value["data"];
+      ori_x_ = static_cast<int>(data["ori_x"]);
+      ori_y_ = static_cast<int>(data["ori_y"]);
+    }
+    else
+      ROS_WARN("DroneTowardsTimeChangeGroupUi config 's member 'data' not defined.");
+
+    graph_vector_.insert(
+        std::pair<std::string, Graph*>(graph_name_ + "_mid", new Graph(rpc_value["config"], base_, id_++)));
+    graph_vector_.insert(
+        std::pair<std::string, Graph*>(graph_name_ + "_left", new Graph(rpc_value["config"], base_, id_++)));
+    graph_vector_.insert(
+        std::pair<std::string, Graph*>(graph_name_ + "_right", new Graph(rpc_value["config"], base_, id_++)));
+  };
+  void updateTowardsData(const geometry_msgs::PoseStampedConstPtr& data);
+
+private:
+  void updateConfig() override;
+  int ori_x_, ori_y_;
+  double angle_;
+  int mid_line_x1_, mid_line_y1_, mid_line_x2_, mid_line_y2_, left_line_x2_, left_line_y2_, right_line_x2_,
+      right_line_y2_;
+};
+
+class FriendBulletsTimeChangeGroupUi : public TimeChangeGroupUi
+{
+public:
+  explicit FriendBulletsTimeChangeGroupUi(XmlRpc::XmlRpcValue& rpc_value, Base& base, std::deque<Graph>* graph_queue,
+                                          std::deque<Graph>* character_queue)
+    : TimeChangeGroupUi(rpc_value, base, "friend_bullets", graph_queue, character_queue)
+  {
+    graph_vector_.insert(std::pair<std::string, Graph*>("hero", new Graph(rpc_value["config"], base_, id_++)));
+    graph_vector_.insert(std::pair<std::string, Graph*>("standard3", new Graph(rpc_value["config"], base_, id_++)));
+    graph_vector_.insert(std::pair<std::string, Graph*>("standard4", new Graph(rpc_value["config"], base_, id_++)));
+    graph_vector_.insert(std::pair<std::string, Graph*>("standard5", new Graph(rpc_value["config"], base_, id_++)));
+    int ui_start_y = 0;
+    for (auto it = graph_vector_.begin(); it != graph_vector_.end(); ++it)
+    {
+      if (it == graph_vector_.begin())
+        ui_start_y = it->second->getConfig().start_y;
+      else
+      {
+        ui_start_y -= 40;
+        it->second->setStartY(ui_start_y);
+      }
+    }
+  };
+  void updateBulletsData(const rm_referee::BulletNumData& data);
+
+private:
+  void updateConfig() override;
+  int hero_bullets_{ 1 }, standard3_bullets_{ 3 }, standard4_bullets_{ 4 }, standard5_bullets_{ 5 };
+};
+
+class TargetHpTimeChangeUi : public TimeChangeUi
+{
+public:
+  explicit TargetHpTimeChangeUi(XmlRpc::XmlRpcValue& rpc_value, Base& base, std::deque<Graph>* graph_queue,
+                                std::deque<Graph>* character_queue)
+    : TimeChangeUi(rpc_value, base, "target_hp", graph_queue, character_queue)
+  {
+    if (rpc_value.hasMember("enemy_id"))
+    {
+      XmlRpc::XmlRpcValue& enemy_id = rpc_value["enemy_id"];
+      for (int i = 0; i < enemy_id.size(); i++)
+      {
+        int id = static_cast<int>(enemy_id[i]);
+        enemy_robot_hp_[id] = 0;
+      }
+    }
+  }
+  void setEnemyHp(const rm_msgs::GameRobotHp& data);
+  void updateTrackID(int id);
+  void updateTargeHptData();
+
+private:
+  void updateConfig() override;
+  std::map<int, int> enemy_robot_hp_;
+  int target_hp_{}, target_id_{};
+};
+
+class LegThetaTimeChangeGroupUi : public TimeChangeGroupUi
+{
+public:
+  explicit LegThetaTimeChangeGroupUi(XmlRpc::XmlRpcValue& rpc_value, Base& base, std::deque<Graph>* graph_queue,
+                                     std::deque<Graph>* character_queue)
+    : TimeChangeGroupUi(rpc_value, base, "leg_theta", graph_queue, character_queue)
+  {
+    XmlRpc::XmlRpcValue line_config;
+    line_config["type"] = "line";
+    if (rpc_value.hasMember("config") && rpc_value["config"].hasMember("color"))
+      line_config["color"] = rpc_value["config"]["color"];
+    else
+      line_config["color"] = "cyan";
+    if (rpc_value.hasMember("config") && rpc_value["config"].hasMember("width"))
+      line_config["width"] = rpc_value["config"]["width"];
+    else
+      line_config["width"] = 2;
+    if (rpc_value.hasMember("config") && rpc_value["config"].hasMember("delay"))
+      line_config["delay"] = rpc_value["config"]["delay"];
+    else
+      line_config["delay"] = 0.2;
+
+    // Virtual rod is rendered as multiple short segments (dash effect).
+    XmlRpc::XmlRpcValue virtual_rod_config = line_config;
+    if (rpc_value.hasMember("config") && rpc_value["config"].hasMember("virtual_rod_color"))
+      virtual_rod_config["color"] = rpc_value["config"]["virtual_rod_color"];
+    if (rpc_value.hasMember("config") && rpc_value["config"].hasMember("virtual_rod_width"))
+      virtual_rod_config["width"] = rpc_value["config"]["virtual_rod_width"];
+    else
+      virtual_rod_config["width"] = 1;
+
+    XmlRpc::XmlRpcValue rect_config;
+    rect_config["type"] = "rectangle";
+    if (rpc_value.hasMember("config") && rpc_value["config"].hasMember("chassis_color"))
+      rect_config["color"] = rpc_value["config"]["chassis_color"];
+    else
+      rect_config["color"] = line_config["color"];
+    rect_config["width"] = line_config["width"];
+    rect_config["delay"] = line_config["delay"];
+
+    if (rpc_value.hasMember("data"))
+    {
+      XmlRpc::XmlRpcValue data = rpc_value["data"];
+      if (data.hasMember("draw_chassis"))
+        draw_chassis_ = static_cast<bool>(data["draw_chassis"]);
+      if (data.hasMember("chassis_start") && data.hasMember("chassis_end"))
+      {
+        chassis_start_[0] = static_cast<int>(data["chassis_start"][0]);
+        chassis_start_[1] = static_cast<int>(data["chassis_start"][1]);
+        chassis_end_[0] = static_cast<int>(data["chassis_end"][0]);
+        chassis_end_[1] = static_cast<int>(data["chassis_end"][1]);
+      }
+      else
+      {
+        ROS_WARN("LegThetaTimeChangeGroupUi: 'data.chassis_start/end' not defined, using default rectangle.");
+        chassis_start_[0] = 800;
+        chassis_start_[1] = 600;
+        chassis_end_[0] = 1120;
+        chassis_end_[1] = 720;
+      }
+
+      if (data.hasMember("origin_point"))
+      {
+        origin_point_[0] = static_cast<int>(data["origin_point"][0]);
+        origin_point_[1] = static_cast<int>(data["origin_point"][1]);
+      }
+      else
+      {
+        // Default: rectangle center.
+        origin_point_[0] = (chassis_start_[0] + chassis_end_[0]) / 2;
+        origin_point_[1] = (chassis_start_[1] + chassis_end_[1]) / 2;
+      }
+
+      if (data.hasMember("link1_length"))
+        link1_length_m_ = static_cast<double>(data["link1_length"]);
+      if (data.hasMember("link2_length"))
+        link2_length_m_ = static_cast<double>(data["link2_length"]);
+      if (data.hasMember("pixels_per_meter"))
+        pixels_per_meter_ = static_cast<double>(data["pixels_per_meter"]);
+      if (data.hasMember("leg_side"))
+        leg_side_ = static_cast<std::string>(data["leg_side"]);
+    }
+    else
+    {
+      ROS_WARN("LegThetaTimeChangeGroupUi config 's member 'data' not defined.");
+    }
+
+    // Chassis rectangle (left=rear, right=front).
+    if (draw_chassis_)
+    {
+      rect_config["start_position"][0] = chassis_start_[0];
+      rect_config["start_position"][1] = chassis_start_[1];
+      rect_config["end_position"][0] = chassis_end_[0];
+      rect_config["end_position"][1] = chassis_end_[1];
+      graph_vector_.insert(std::make_pair<std::string, Graph*>("chassis", new Graph(rect_config, base_, id_++)));
+    }
+
+    // Link 1 and Link 2.
+    line_config["start_position"][0] = origin_point_[0];
+    line_config["start_position"][1] = origin_point_[1];
+    line_config["end_position"][0] = origin_point_[0];
+    line_config["end_position"][1] = origin_point_[1];
+    graph_vector_.insert(std::make_pair<std::string, Graph*>("link1", new Graph(line_config, base_, id_++)));
+    graph_vector_.insert(std::make_pair<std::string, Graph*>("link2", new Graph(line_config, base_, id_++)));
+  }
+
+  void calculatePointPosition(const rm_msgs::LeggedChassisStatusConstPtr& data, const ros::Time& time);
+
+private:
+  void updateConfig() override;
+
+  int chassis_start_[2]{ 800, 600 };
+  int chassis_end_[2]{ 1120, 720 };
+  int origin_point_[2]{ 960, 660 };  // hip/pivot point in screen coordinates
+
+  bool draw_chassis_{ true };
+
+  // IK config
+  double link1_length_m_{ 0.21 };
+  double link2_length_m_{ 0.248 };
+  double pixels_per_meter_{ 600.0 };
+  std::string leg_side_{ "left" };  // "left" or "right"
+
+  // Latest input (virtual rod)
+  double virtual_rod_length_m_{ 0.0 };
+  double virtual_rod_theta_rad_{ 0.0 };
+
+  // Solved points (screen coordinates)
+  int knee_point_[2]{ 960, 660 };
+  int foot_point_[2]{ 960, 660 };
+
+  // Keep IK solution continuous across updates (avoid knee flipping between the two possible IK branches).
+  bool knee_initialized_{ false };
+};
+
+}  // namespace rm_referee

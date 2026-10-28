@@ -1,0 +1,38 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>rm_control</name>
+  <version>0.0.0</version>
+  <description>The rm_control package</description>
+
+  <maintainer email="root@todo.todo">root</maintainer>
+  <license>TODO</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <!-- ROS 基础 -->
+  <depend>roscpp</depend>
+  <depend>rospy</depend>
+  <depend>std_msgs</depend>
+
+  <!-- 控制 -->
+  <depend>controller_interface</depend>
+  <depend>hardware_interface</depend>
+  <depend>controller_manager</depend>
+  <depend>pluginlib</depend>
+
+  <!-- 消息 -->
+  <depend>geometry_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>sensor_msgs</depend>
+
+  <!-- tf2 -->
+  <depend>tf2</depend>
+  <depend>tf2_ros</depend>
+
+  <!-- Gazebo（如果用 gazebo_ros_control） -->
+  <depend>gazebo_ros_control</depend>
+
+  <export>
+    <controller_interface plugin="${prefix}/standard_controller_plugin.xml"/>
+  </export>
+</package>

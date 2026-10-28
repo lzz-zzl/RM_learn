@@ -1,0 +1,45 @@
+<launch>
+
+    <arg name="robot_type" default="$(env ROBOT_TYPE)" doc="Robot type [standard, auto, hero, engineer,sentry,rmua]"/>
+
+    <include file="$(find rm_gazebo)/launch/slope.launch">
+    </include>
+
+    <rosparam file="$(find rm_control)/config/$(arg robot_type)_classis.yaml" command="load"/>
+    <!--    改controller_spawner命名空间，加载gazebo参数-->
+    <node name="controller_spawner" pkg="controller_manager" type="spawner"
+          args="--timeout 0 joint_state_controller standard_controller"
+          output="screen"/>
+
+    <!--结算四元数-->
+    <node pkg="imu_filter_madgwick" type="imu_filter_node" name="imu_filter_gimbal" output="screen">
+        <!-- 关键：用 remap，不是 param -->
+        <remap from="imu/data_raw" to="/gimbal_imu/imu"/>
+        <remap from="imu/data" to="/gimbal_imu/data_filtered"/>
+
+        <param name="use_mag" value="false"/>
+        <param name="publish_tf" value="false"/>
+        <param name="gain" value="0.1"/>
+        <param name="world_frame" value="enu"/>
+    </node>
+    <node pkg="imu_filter_madgwick" type="imu_filter_node" name="imu_filter_chassis" output="screen">
+        <!-- 关键：用 remap，不是 param -->
+        <remap from="imu/data_raw" to="/chassis_imu/imu"/>
+        <remap from="imu/data" to="/chassis_imu/data_filtered"/>
+
+        <param name="use_mag" value="false"/>
+        <param name="publish_tf" value="false"/>
+        <param name="gain" value="0.1"/>
+        <param name="world_frame" value="enu"/>
+    </node>
+    <node name="robot_state_publisher"
+          pkg="robot_state_publisher"
+          type="robot_state_publisher"
+          output="screen">
+        <param name="publish_frequency" value="50.0"/>
+        <param name="ignore_timestamp" value="false"/>
+    </node>
+
+    <node name="rviz" pkg="rviz" type="rviz" args="-d $(find rm_control)/rviz/odom_tf.rviz"/>
+
+</launch>
